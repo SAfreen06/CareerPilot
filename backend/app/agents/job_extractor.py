@@ -37,6 +37,11 @@ Rules:
 - For skills, only include explicitly mentioned technologies/tools
 - For job_type, infer from context — "intern" means "internship"
 - Keep summary under 15 words
+- **CRITICAL - Company Name Rules:**
+  * Extract the company that is ACTUALLY HIRING, not the job board/platform
+  * NEVER use these platform names as company: Job Media, bdjobs, Bdtechjobs, Facebook, LinkedIn, Upwork, Freelancer, Indeed, Glassdoor, Monster, Naukri, ZipRecruiter, Himalayas, Remotive
+  * If the job is on a platform, look for the real company name in the content
+  * If no real company name is found, use null
 - Respond ONLY with the JSON object. No explanation. No markdown. No code fences.
 """
 
@@ -72,9 +77,28 @@ def extract_job_fields(title: str, content: str) -> dict:
 
 def sanitize_fields(raw: dict) -> dict:
     """Enforce types and clean up LLM output."""
+    
+    # List of job board/platform names to filter out
+    PLATFORM_NAMES = {
+        "job media", "job media ltd", "bdjobs", "bdtechjobs", "chakri", 
+        "facebook", "linkedin", "twitter", "instagram", "upwork", 
+        "freelancer", "indeed", "glassdoor", "monster", "naukri",
+        "ziprecruiter", "himalayas", "remotive", "dailyremote", "web3",
+        "bebee", "expertini", "dhakacareers", "jobs.com.bd"
+    }
+    
+    company = str(raw.get("company") or "").strip() if raw.get("company") else None
+    
+    # Filter out platform names
+    if company:
+        company_clean = company.lower()
+        is_platform = any(platform in company_clean for platform in PLATFORM_NAMES)
+        if is_platform:
+            company = None
+    
     return {
         "role": str(raw.get("role") or "").strip() or "Software Engineer",
-        "company": str(raw.get("company")).strip() if raw.get("company") else None,
+        "company": company,
         "location": str(raw.get("location")).strip() if raw.get("location") else None,
         "salary": str(raw.get("salary")).strip() if raw.get("salary") else None,
         "deadline": str(raw.get("deadline")).strip() if raw.get("deadline") else None,
@@ -122,7 +146,6 @@ def extract_all_jobs(raw_results: list[dict]) -> list[dict]:
             "apply_url": url,
             "relevance_score": round(score, 3),
             "source": source,
-            # fit_percent will be added later by M1's fit score function
             "fit_percent": None,
             "matched_skills": [],
             "missing_skills": [],

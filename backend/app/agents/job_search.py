@@ -1,13 +1,12 @@
 """
 Job search — takes parsed Tavily params, calls Tavily API,
-returns raw results list.
-
-Member 2 owns this file.
+returns raw results list. Now with Remotive integration.
 """
 import os
 import requests
 from dotenv import load_dotenv
 from app.agents.query_parser import parse_query
+from app.agents.remotive_search import search_remotive_from_parsed_params, convert_remotive_to_job_card
 
 load_dotenv()
 
@@ -47,25 +46,50 @@ SEED_JOBS = [
 
 # ── Tavily search ─────────────────────────────────────────────────────────────
 
-def search_jobs(user_query: str) -> list[dict]:
-    # Step 1: parse query
+def search_jobs(user_query: str, use_remotive: bool = True) -> list[dict]:
+    # Step 1: parse query (for Tavily)
     params = parse_query(user_query)
     print(f"[job_search] Parsed params: {params}")
 
-    # Step 2: call Tavily
-    results = _call_tavily(params)
-
-    # Filter out low relevance results
-    results = [r for r in results if r.get("score", 0) >= 0.4]
-
-    print(f"[job_search] Tavily returned {len(results)} results after filtering")
-
-    # Step 3: append seed jobs if sparse
-    if len(results) < 3:
+    results = []
+    
+    # Step 2: call Tavily (uses parsed query with location)
+    tavily_results = _call_tavily(params)
+    tavily_results = [r for r in tavily_results if r.get("score", 0) >= 0.4]
+    print(f"[job_search] Tavily returned {len(tavily_results)} results after filtering")
+    results.extend(tavily_results)
+    
+    # Step 3: call Remotive with ORIGINAL query
+    if use_remotive:
+        # Create a new params dict with the ORIGINAL query
+        remotive_params = {
+            "query": user_query,  # Use original user query
+            "filters": params.get("filters", {}),  # Keep filters
+            "max_results": params.get("max_results", 10)
+        }
+        
+        remotive_jobs = search_remotive_from_parsed_params(remotive_params)
+        print(f"[job_search] Remotive returned {len(remotive_jobs)} results")
+        results.extend(remotive_jobs)
+    
+    
+    # Step 4: deduplicate by URL
+    seen_urls = set()
+    unique_results = []
+    for r in results:
+        url = r.get("url", "")
+        if url not in seen_urls:
+            seen_urls.add(url)
+            unique_results.append(r)
+    
+    # Step 5: append seed jobs if still sparse
+    if len(unique_results) < 3:
         print("[job_search] Sparse results — appending seed jobs")
-        results = results + SEED_JOBS
-
-    return results
+        unique_results = unique_results + SEED_JOBS
+    
+    print(f"[job_search] Total {len(unique_results)} unique results (Tavily: {len(tavily_results)}, Remotive: {len(remotive_jobs) if use_remotive else 0})")
+    
+    return unique_results
 
 
 def _call_tavily(params: dict) -> list[dict]:
@@ -80,8 +104,6 @@ def _call_tavily(params: dict) -> list[dict]:
         "query": query,
         "max_results": params["max_results"],
         "search_depth": "basic",
-        # DO NOT use include_domains — too restrictive, causes 0 results
-        # DO NOT use exclude_domains either
     }
 
     if params.get("time_range"):
@@ -116,7 +138,7 @@ def _call_tavily(params: dict) -> list[dict]:
 # ── Quick test ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    query = "software engineer jobs Dhaka Bangladesh"
+    query = "software engineer intern remote"
     print(f"Searching for: {query}\n")
     results = search_jobs(query)
 
@@ -124,6 +146,7 @@ if __name__ == "__main__":
         print(f"Result {i}:")
         print(f"  Title   : {r.get('title')}")
         print(f"  URL     : {r.get('url')}")
+        print(f"  Source  : {r.get('source')}")
         print(f"  Score   : {r.get('score')}")
         print(f"  Content : {r.get('content', '')[:120]}...")
         print()
