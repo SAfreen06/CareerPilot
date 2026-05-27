@@ -1,35 +1,67 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
     Briefcase,
     BookOpen,
     Code,
     Zap,
-    Upload,
     AlertCircle,
     Loader2,
     Check,
+    RefreshCcw,
 } from 'lucide-react'
+import { getBackendUrl } from '@/lib/backend'
 
 interface CVParsedItem {
     section: string
     content: string
 }
 
+interface CVEmbeddedSection {
+    section: string
+    items: CVParsedItem[]
+}
+
+interface CVEmbeddedDataResponse {
+    file_id: string
+    chunk_count: number
+    collection: string
+    sections: CVEmbeddedSection[]
+}
+
+const SECTION_ALIASES: Record<string, string[]> = {
+    experience: ['experience', 'work experience', 'professional experience', 'employment history', 'career history'],
+    education: ['education', 'education and training', 'academic background', 'academic history', 'qualifications'],
+    skills: ['skills', 'technical skills', 'core skills', 'competencies', 'core competencies'],
+    projects: ['projects', 'project experience', 'selected projects', 'project portfolio'],
+}
+
+function normalizeSectionKey(section: string) {
+    const normalized = section.trim().toLowerCase()
+    const entry = Object.entries(SECTION_ALIASES).find(([, aliases]) =>
+        aliases.includes(normalized)
+    )
+    return entry?.[0] ?? normalized
+}
+
 interface DashboardProps {
     fileId: string
     fileName: string
     chunkCount: number
+    onReupload?: () => void
 }
 
 export default function DashboardContent({
     fileId,
     fileName,
     chunkCount,
+    onReupload,
 }: DashboardProps) {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [collection, setCollection] = useState<string | null>(null)
+    const [liveChunkCount, setLiveChunkCount] = useState(chunkCount)
     const [parsedData, setParsedData] = useState<{
         experience: CVParsedItem[]
         education: CVParsedItem[]
@@ -43,53 +75,67 @@ export default function DashboardContent({
     })
 
     useEffect(() => {
-        // Simulate parsing CV data
-        // In a real app, this would fetch from your backend or Chroma vector DB
-        const mockData = {
-            experience: [
-                {
-                    section: 'Software Engineer',
-                    content: 'Built and maintained scalable backend services using Python and FastAPI',
-                },
-                {
-                    section: 'Junior Developer',
-                    content: 'Developed frontend components with React and TypeScript',
-                },
-            ],
-            education: [
-                {
-                    section: 'Bachelor of Computer Science',
-                    content: 'University of Technology - Graduated 2022',
-                },
-            ],
-            skills: [
-                { section: 'Languages', content: 'Python, JavaScript, TypeScript' },
-                {
-                    section: 'Frameworks',
-                    content: 'FastAPI, React, Next.js, Tailwind CSS',
-                },
-                {
-                    section: 'Tools & Databases',
-                    content: 'PostgreSQL, MongoDB, Docker, AWS',
-                },
-            ],
-            projects: [
-                {
-                    section: 'CareerPilot',
-                    content: 'AI-powered career guidance platform with job recommendations',
-                },
-                {
-                    section: 'Task Management App',
-                    content: 'Full-stack application with real-time updates',
-                },
-            ],
+        let cancelled = false
+
+        async function loadResumeData() {
+            setLoading(true)
+            setError(null)
+
+            try {
+                const backendUrl = getBackendUrl()
+                const response = await fetch(
+                    `${backendUrl}/api/cv/embedded-data?file_id=${encodeURIComponent(fileId)}`
+                )
+
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => null)
+                    throw new Error(payload?.detail || 'Failed to load resume data')
+                }
+
+                const data = (await response.json()) as CVEmbeddedDataResponse
+                if (cancelled) {
+                    return
+                }
+
+                const nextParsedData = {
+                    experience: [] as CVParsedItem[],
+                    education: [] as CVParsedItem[],
+                    skills: [] as CVParsedItem[],
+                    projects: [] as CVParsedItem[],
+                }
+
+                data.sections.forEach((section) => {
+                    const sectionKey = normalizeSectionKey(section.section) as keyof typeof nextParsedData
+                    if (sectionKey in nextParsedData) {
+                        nextParsedData[sectionKey] = section.items
+                    }
+                })
+
+                setParsedData(nextParsedData)
+                setCollection(data.collection)
+                setLiveChunkCount(data.chunk_count)
+            } catch (fetchError) {
+                if (!cancelled) {
+                    const message =
+                        fetchError instanceof Error
+                            ? fetchError.message
+                            : 'Failed to load resume data'
+                    setError(message)
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false)
+                }
+            }
         }
 
-        // Simulate delay
-        setTimeout(() => {
-            setParsedData(mockData)
-            setLoading(false)
-        }, 800)
+        if (fileId) {
+            loadResumeData()
+        }
+
+        return () => {
+            cancelled = true
+        }
     }, [fileId])
 
     const sectionConfig = [
@@ -119,8 +165,8 @@ export default function DashboardContent({
         return (
             <div className="flex items-center justify-center py-20">
                 <div className="text-center space-y-4">
-                    <Loader2 className="w-10 h-10 text-gray-500 animate-spin mx-auto" />
-                    <p className="text-gray-400">Loading your resume...</p>
+                    <Loader2 className="w-10 h-10 text-white/70 animate-spin mx-auto" />
+                    <p className="text-white/70">Loading your resume...</p>
                 </div>
             </div>
         )
@@ -133,63 +179,70 @@ export default function DashboardContent({
                     <h1 className="text-3xl sm:text-4xl font-semibold text-white">
                         Your profile
                     </h1>
-                    <p className="text-gray-400 text-sm">
-                        Resume: <span className="text-gray-200">{fileName}</span>
+                    <p className="text-white/70 text-sm">
+                        Resume: <span className="text-white">{fileName}</span>
+                    </p>
+                    <p className="text-xs text-white/50">
+                        {collection ? `Indexed in ${collection}` : 'Live embedded data'}
                     </p>
                 </div>
-                <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-700 bg-[#1e1b18] text-gray-200 text-sm">
-                    <Upload className="w-4 h-4" />
-                    Upload new resume
+                <button
+                    type="button"
+                    onClick={onReupload}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/15 bg-[#171717] text-white text-sm hover:border-white/35 transition-colors"
+                >
+                    <RefreshCcw className="w-4 h-4" />
+                    Re-upload resume
                 </button>
             </div>
 
             {error && (
-                <div className="rounded-xl bg-red-500/10 border border-red-500/40 p-4 flex gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="rounded-xl bg-white/5 border border-white/15 p-4 flex gap-3">
+                    <AlertCircle className="w-5 h-5 text-white/70 flex-shrink-0 mt-0.5" />
                     <div>
-                        <p className="text-red-200 font-medium">Error loading resume</p>
-                        <p className="text-red-300 text-sm mt-1">{error}</p>
+                        <p className="text-white font-medium">Error loading resume</p>
+                        <p className="text-white/70 text-sm mt-1">{error}</p>
                     </div>
                 </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-gray-800 bg-[#151312] p-5">
+                <div className="rounded-xl border border-white/15 bg-[#171717] p-5">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-gray-400 text-sm">Chunks extracted</p>
+                            <p className="text-white/60 text-sm">Chunks extracted</p>
                             <p className="text-2xl font-semibold text-white mt-2">
-                                {chunkCount}
+                                {liveChunkCount}
                             </p>
                         </div>
-                        <Zap className="w-6 h-6 text-gray-600" />
+                        <Zap className="w-6 h-6 text-white/45" />
                     </div>
                 </div>
-                <div className="rounded-xl border border-gray-800 bg-[#151312] p-5">
+                <div className="rounded-xl border border-white/15 bg-[#171717] p-5">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-gray-400 text-sm">Sections</p>
+                            <p className="text-white/60 text-sm">Sections</p>
                             <p className="text-2xl font-semibold text-white mt-2">4</p>
                         </div>
-                        <Code className="w-6 h-6 text-gray-600" />
+                        <Code className="w-6 h-6 text-white/45" />
                     </div>
                 </div>
-                <div className="rounded-xl border border-gray-800 bg-[#151312] p-5">
+                <div className="rounded-xl border border-white/15 bg-[#171717] p-5">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-gray-400 text-sm">Indexed</p>
+                            <p className="text-white/60 text-sm">Indexed</p>
                             <p className="text-2xl font-semibold text-white mt-2">Yes</p>
                         </div>
-                        <Check className="w-6 h-6 text-gray-600" />
+                        <Check className="w-6 h-6 text-white/45" />
                     </div>
                 </div>
-                <div className="rounded-xl border border-gray-800 bg-[#151312] p-5">
+                <div className="rounded-xl border border-white/15 bg-[#171717] p-5">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-gray-400 text-sm">Ready</p>
+                            <p className="text-white/60 text-sm">Ready</p>
                             <p className="text-2xl font-semibold text-white mt-2">Yes</p>
                         </div>
-                        <BookOpen className="w-6 h-6 text-gray-600" />
+                        <BookOpen className="w-6 h-6 text-white/45" />
                     </div>
                 </div>
             </div>
@@ -203,14 +256,14 @@ export default function DashboardContent({
                     return (
                         <div
                             key={section.key}
-                            className="rounded-xl border border-gray-800 bg-[#151312] overflow-hidden"
+                            className="rounded-xl border border-white/15 bg-[#171717] overflow-hidden"
                         >
-                            <div className="border-b border-gray-800 px-5 py-4 flex items-center gap-3 bg-[#141210]">
-                                <Icon className="w-4 h-4 text-gray-400" />
+                            <div className="border-b border-white/10 px-5 py-4 flex items-center gap-3 bg-[#141414]">
+                                <Icon className="w-4 h-4 text-white/60" />
                                 <h2 className="text-white font-semibold text-sm">
                                     {section.title}
                                 </h2>
-                                <span className="ml-auto bg-[#1e1b18] text-gray-300 text-xs font-medium px-2 py-1 rounded">
+                                <span className="ml-auto bg-[#232323] text-white/70 text-xs font-medium px-2 py-1 rounded">
                                     {data.length}
                                 </span>
                             </div>
@@ -220,17 +273,17 @@ export default function DashboardContent({
                                     <ul className="space-y-4">
                                         {data.map((item, idx) => (
                                             <li key={idx} className="space-y-1">
-                                                <p className="font-medium text-gray-200">
+                                                <p className="font-medium text-white">
                                                     {item.section}
                                                 </p>
-                                                <p className="text-gray-400 text-sm leading-relaxed">
+                                                <p className="text-white/70 text-sm leading-relaxed">
                                                     {item.content}
                                                 </p>
                                             </li>
                                         ))}
                                     </ul>
                                 ) : (
-                                    <p className="text-gray-500 text-sm">
+                                    <p className="text-white/50 text-sm">
                                         No {section.title.toLowerCase()} found in your resume
                                     </p>
                                 )}
@@ -241,26 +294,26 @@ export default function DashboardContent({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="rounded-xl border border-gray-800 bg-[#151312] p-6">
+                <div className="rounded-xl border border-white/15 bg-[#171717] p-6">
                     <h3 className="text-white font-semibold text-lg mb-2">
                         Find jobs
                     </h3>
-                    <p className="text-gray-400 text-sm mb-4">
+                    <p className="text-white/70 text-sm mb-4">
                         Discover job opportunities tailored to your skills and experience.
                     </p>
-                    <button className="text-gray-200 hover:text-white font-medium text-sm transition-colors">
+                    <button className="text-white font-medium text-sm transition-colors">
                         Explore jobs
                     </button>
                 </div>
 
-                <div className="rounded-xl border border-gray-800 bg-[#151312] p-6">
+                <div className="rounded-xl border border-white/15 bg-[#171717] p-6">
                     <h3 className="text-white font-semibold text-lg mb-2">
                         AI assistant
                     </h3>
-                    <p className="text-gray-400 text-sm mb-4">
+                    <p className="text-white/70 text-sm mb-4">
                         Chat with your AI career co-pilot for personalized guidance.
                     </p>
-                    <button className="text-gray-200 hover:text-white font-medium text-sm transition-colors">
+                    <button className="text-white font-medium text-sm transition-colors">
                         Start chat
                     </button>
                 </div>

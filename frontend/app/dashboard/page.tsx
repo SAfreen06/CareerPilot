@@ -30,17 +30,25 @@ export default function DashboardPage() {
         setIsLoading(false)
     }, [])
 
-    const handleUploadSuccess = (fileId: string, fileName: string) => {
-        // Store CV data in localStorage (for now)
-        // In production, this would be stored in Supabase
+    const handleUploadSuccess = (
+        fileId: string,
+        fileName: string,
+        chunkCount: number
+    ) => {
         const cvData = {
             fileId,
             fileName,
-            chunkCount: 0, // This would come from the backend response
+            chunkCount,
         }
         localStorage.setItem('userCV', JSON.stringify(cvData))
         setCVData(cvData)
         setHasCVUploaded(true)
+    }
+
+    const handleReupload = () => {
+        localStorage.removeItem('userCV')
+        setCVData(null)
+        setHasCVUploaded(false)
     }
 
     if (isLoading) {
@@ -64,6 +72,7 @@ export default function DashboardPage() {
                         fileId={cvData.fileId}
                         fileName={cvData.fileName}
                         chunkCount={cvData.chunkCount}
+                        onReupload={handleReupload}
                     />
                 )
             )}

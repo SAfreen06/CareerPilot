@@ -48,7 +48,7 @@ export default function SettingsPage() {
 
                 {activeTab === 'profile' && (
                     <div className="space-y-6">
-                        <div className="rounded-xl border border-gray-800 bg-[#151312] p-6">
+                        <div className="rounded-xl border border-slate-700 bg-[#0f172a] p-6">
                             <h2 className="text-lg font-semibold text-white mb-6">
                                 Profile Information
                             </h2>
@@ -73,13 +73,13 @@ export default function SettingsPage() {
                                                     [field.value]: e.target.value,
                                                 })
                                             }
-                                            className="w-full px-4 py-2 rounded-lg border border-gray-700 bg-[#12100f] text-white focus:outline-none focus:border-gray-500 transition-colors"
+                                            className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-[#111827] text-white focus:outline-none focus:border-cyan-400/60 transition-colors"
                                         />
                                     </div>
                                 ))}
                             </div>
 
-                            <button className="mt-6 px-6 py-2 rounded-lg bg-[#1e1b18] border border-gray-700 text-white font-medium transition-colors hover:border-gray-500">
+                            <button className="mt-6 px-6 py-2 rounded-lg bg-[#111827] border border-slate-700 text-white font-medium transition-colors hover:border-cyan-400/60">
                                 Save Changes
                             </button>
                         </div>
@@ -88,7 +88,7 @@ export default function SettingsPage() {
 
                 {activeTab === 'notifications' && (
                     <div className="space-y-6">
-                        <div className="rounded-xl border border-gray-800 bg-[#151312] p-6">
+                        <div className="rounded-xl border border-slate-700 bg-[#0f172a] p-6">
                             <h2 className="text-lg font-semibold text-white mb-6">
                                 Notification Preferences
                             </h2>
@@ -119,7 +119,7 @@ export default function SettingsPage() {
                                 ].map((item, idx) => (
                                     <div
                                         key={idx}
-                                        className="flex items-center justify-between p-4 rounded-lg bg-[#12100f] border border-gray-800"
+                                        className="flex items-center justify-between p-4 rounded-lg bg-[#111827] border border-slate-700"
                                     >
                                         <div>
                                             <p className="text-white font-medium">{item.title}</p>
@@ -139,7 +139,7 @@ export default function SettingsPage() {
 
                 {activeTab === 'security' && (
                     <div className="space-y-6">
-                        <div className="rounded-xl border border-gray-800 bg-[#151312] p-6">
+                        <div className="rounded-xl border border-slate-700 bg-[#0f172a] p-6">
                             <h2 className="text-lg font-semibold text-white mb-6">
                                 Change Password
                             </h2>
@@ -156,14 +156,14 @@ export default function SettingsPage() {
                                         </label>
                                         <input
                                             type={field.type}
-                                            className="w-full px-4 py-2 rounded-lg border border-gray-700 bg-[#12100f] text-white focus:outline-none focus:border-gray-500 transition-colors"
+                                            className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-[#111827] text-white focus:outline-none focus:border-cyan-400/60 transition-colors"
                                             placeholder="password"
                                         />
                                     </div>
                                 ))}
                             </div>
 
-                            <button className="mt-6 px-6 py-2 rounded-lg bg-[#1e1b18] border border-gray-700 text-white font-medium transition-colors hover:border-gray-500">
+                            <button className="mt-6 px-6 py-2 rounded-lg bg-[#111827] border border-slate-700 text-white font-medium transition-colors hover:border-cyan-400/60">
                                 Update Password
                             </button>
                         </div>

@@ -14,7 +14,7 @@ import {
 import { getBackendUrl } from '@/lib/backend'
 
 interface InitialCVUploadProps {
-    onUploadSuccess?: (fileId: string, fileName: string) => void
+    onUploadSuccess?: (fileId: string, fileName: string, chunkCount: number) => void
 }
 
 export default function InitialCVUpload({
@@ -81,6 +81,7 @@ export default function InitialCVUpload({
             const data = await response.json()
             const fileId = data.file_id
             const fileName = data.file_name
+            let chunkCount = 0
 
             // Then, ingest the file
             try {
@@ -100,6 +101,7 @@ export default function InitialCVUpload({
                 } else {
                     const ingestData = await ingestResponse.json()
                     console.log('Ingest successful:', ingestData)
+                    chunkCount = ingestData.chunk_count ?? 0
                 }
             } catch (ingestError) {
                 console.error('Ingest request failed:', ingestError)
@@ -107,7 +109,7 @@ export default function InitialCVUpload({
             }
 
             setSuccess(true)
-            onUploadSuccess?.(fileId, fileName)
+            onUploadSuccess?.(fileId, fileName, chunkCount)
 
             // Reset success after 2 seconds
             setTimeout(() => setSuccess(false), 2000)
@@ -157,8 +159,8 @@ export default function InitialCVUpload({
 
     return (
         <div className="max-w-6xl mx-auto space-y-10">
-            <div className="inline-flex items-center gap-2 rounded-full border border-gray-800 bg-[#242525] px-3 py-1 text-xs text-gray-400">
-                <span className="h-2 w-2 rounded-full bg-gray-500" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-[#0f172a] px-3 py-1 text-xs text-slate-400">
+                <span className="h-2 w-2 rounded-full bg-cyan-400" />
                 Welcome to CareerPilot
             </div>
 
@@ -180,8 +182,8 @@ export default function InitialCVUpload({
                         onDragOver={handleDrag}
                         onDrop={handleDrop}
                         className={`rounded-2xl border-2 border-dashed px-6 py-10 transition-all ${dragActive
-                            ? 'border-gray-500 bg-white/5'
-                            : 'border-gray-700 bg-[#2a2b2b]'
+                            ? 'border-cyan-400/70 bg-cyan-400/5'
+                            : 'border-slate-700 bg-[#0f172a]'
                             }`}
                     >
                         <input
@@ -194,39 +196,39 @@ export default function InitialCVUpload({
                         />
                         <label htmlFor="cv-upload" className="cursor-pointer block">
                             <div className="flex flex-col items-center text-center gap-4">
-                                <div className="h-12 w-12 rounded-2xl border border-gray-700 bg-[#2a2b2b] flex items-center justify-center">
+                                <div className="h-12 w-12 rounded-2xl border border-slate-700 bg-[#111827] flex items-center justify-center">
                                     {isLoading ? (
-                                        <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+                                        <Loader2 className="w-5 h-5 text-slate-300 animate-spin" />
                                     ) : success ? (
-                                        <CheckCircle className="w-5 h-5 text-gray-200" />
+                                        <CheckCircle className="w-5 h-5 text-slate-100" />
                                     ) : (
-                                        <Upload className="w-5 h-5 text-gray-300" />
+                                        <Upload className="w-5 h-5 text-slate-300" />
                                     )}
                                 </div>
                                 <div className="space-y-2">
-                                    <div className="text-white font-medium text-lg">
+                                    <div className="text-slate-50 font-medium text-lg">
                                         {isLoading
                                             ? 'Uploading...'
                                             : success
                                                 ? 'Upload successful'
                                                 : 'Drop your CV here'}
                                     </div>
-                                    <p className="text-gray-500 text-sm">
+                                    <p className="text-slate-400 text-sm">
                                         Drag and drop your resume, or click to browse.
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                    <span className="px-2 py-1 rounded-md border border-gray-800 bg-[#242525]">
+                                <div className="flex items-center gap-2 text-xs text-slate-400">
+                                    <span className="px-2 py-1 rounded-md border border-slate-700 bg-[#111827]">
                                         PDF
                                     </span>
-                                    <span className="px-2 py-1 rounded-md border border-gray-800 bg-[#242525]">
+                                    <span className="px-2 py-1 rounded-md border border-slate-700 bg-[#111827]">
                                         DOCX
                                     </span>
-                                    <span className="px-2 py-1 rounded-md border border-gray-800 bg-[#242525]">
+                                    <span className="px-2 py-1 rounded-md border border-slate-700 bg-[#111827]">
                                         Max 10MB
                                     </span>
                                 </div>
-                                <div className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-[#303131] px-4 py-2 text-sm text-gray-200">
+                                <div className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-[#111827] px-4 py-2 text-sm text-slate-100">
                                     <FileText className="h-4 w-4" />
                                     Browse Files
                                 </div>
@@ -246,9 +248,9 @@ export default function InitialCVUpload({
                 </div>
 
                 <div className="space-y-4">
-                    <div className="rounded-2xl border border-gray-800 bg-[#242525] p-5">
+                    <div className="rounded-2xl border border-slate-700 bg-[#0f172a] p-5">
                         <h3 className="text-white font-semibold text-sm mb-4">What we extract</h3>
-                        <ul className="space-y-3 text-sm text-gray-400">
+                        <ul className="space-y-3 text-sm text-slate-400">
                             {[
                                 'Work experience, roles and responsibilities',
                                 'Education, degrees and institutions',
@@ -257,18 +259,18 @@ export default function InitialCVUpload({
                                 'Certifications and languages',
                             ].map((item) => (
                                 <li key={item} className="flex gap-2">
-                                    <Check className="h-4 w-4 text-gray-500 mt-0.5" />
+                                    <Check className="h-4 w-4 text-slate-500 mt-0.5" />
                                     <span>{item}</span>
                                 </li>
                             ))}
                         </ul>
                     </div>
 
-                    <div className="rounded-2xl border border-gray-800 bg-[#242525] p-5">
+                    <div className="rounded-2xl border border-slate-700 bg-[#0f172a] p-5">
                         <h3 className="text-white font-semibold text-sm mb-4">
                             Unlocked after upload
                         </h3>
-                        <ul className="space-y-3 text-sm text-gray-400">
+                        <ul className="space-y-3 text-sm text-slate-400">
                             {[
                                 'Personalized job feed with fit scores',
                                 'AI assistant grounded in your profile',
@@ -277,17 +279,17 @@ export default function InitialCVUpload({
                                 'Learning roadmap and progress tracking',
                             ].map((item) => (
                                 <li key={item} className="flex gap-2">
-                                    <Check className="h-4 w-4 text-gray-500 mt-0.5" />
+                                    <Check className="h-4 w-4 text-slate-500 mt-0.5" />
                                     <span>{item}</span>
                                 </li>
                             ))}
                         </ul>
                     </div>
 
-                    <div className="rounded-2xl border border-gray-800 bg-[#242525] p-5 text-sm text-gray-400 flex gap-3">
-                        <ShieldCheck className="h-4 w-4 text-gray-500 mt-0.5" />
+                    <div className="rounded-2xl border border-slate-700 bg-[#0f172a] p-5 text-sm text-slate-400 flex gap-3">
+                        <ShieldCheck className="h-4 w-4 text-slate-500 mt-0.5" />
                         <div>
-                            <div className="text-gray-200 font-medium">Privacy first</div>
+                            <div className="text-slate-100 font-medium">Privacy first</div>
                             Your CV is stored securely and only used to personalize your
                             experience.
                         </div>
@@ -298,7 +300,7 @@ export default function InitialCVUpload({
             <div className="space-y-4 pt-2">
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-white">Your Job Feed</h2>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-gray-800 bg-[#242525] px-3 py-1 text-xs text-gray-400">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-[#0f172a] px-3 py-1 text-xs text-slate-400">
                         <Lock className="h-3 w-3" />
                         Locked
                     </div>
@@ -307,17 +309,17 @@ export default function InitialCVUpload({
                     {previewJobs.map((job) => (
                         <div
                             key={job.role}
-                            className="rounded-xl border border-gray-800 bg-[#242525] p-4"
+                            className="rounded-xl border border-slate-700 bg-[#0f172a] p-4"
                         >
-                            <div className="text-sm text-gray-400">{job.company}</div>
+                            <div className="text-sm text-slate-400">{job.company}</div>
                             <div className="text-white font-medium mt-1">{job.role}</div>
-                            <div className="mt-3 inline-flex items-center gap-2 text-xs text-gray-400 rounded-full border border-gray-800 px-2 py-1">
+                            <div className="mt-3 inline-flex items-center gap-2 text-xs text-slate-400 rounded-full border border-slate-700 px-2 py-1">
                                 Match {job.match}
                             </div>
                         </div>
                     ))}
                 </div>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-slate-500">
                     Upload your resume to see job matches tailored to your profile.
                 </p>
             </div>

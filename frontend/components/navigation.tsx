@@ -107,7 +107,7 @@ export default function Navigation({ collapsed, onToggle }: NavigationProps) {
                                 href={item.href}
                                 onClick={() => setMobileMenuOpen(false)}
                                 className={`flex items-center ${showLabels ? 'gap-3 px-3' : 'justify-center px-2'} rounded-lg py-2 text-sm font-medium transition-colors ${active
-                                    ? 'bg-[#2a2b2b] text-white'
+                                    ? 'bg-[#111827] text-white'
                                     : 'text-white hover:bg-[#2d2e2e]'
                                     }`}
                             >
@@ -126,7 +126,7 @@ export default function Navigation({ collapsed, onToggle }: NavigationProps) {
                 </div>
 
                 <div className={`mt-auto pt-8 flex items-center text-white text-sm ${showLabels ? 'gap-3' : 'justify-center'}`}>
-                    <span className="h-9 w-9 rounded-full bg-[#2a2b2b] border border-gray-800 flex items-center justify-center text-xs text-white">
+                    <span className="h-9 w-9 rounded-full bg-[#111827] border border-gray-800 flex items-center justify-center text-xs text-white">
                         AR
                     </span>
                     {showLabels && (

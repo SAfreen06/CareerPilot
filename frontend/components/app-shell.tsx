@@ -13,10 +13,10 @@ export default function AppShell({ children }: AppShellProps) {
 
     return (
         <div
-            className="min-h-screen bg-[#2d2e2e] text-white"
+            className="min-h-screen bg-[#131313] text-white"
             style={{ ['--sidebar-width' as string]: sidebarWidth }}
         >
-            <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(900px_circle_at_20%_-10%,rgba(255,255,255,0.06),transparent_45%),radial-gradient(800px_circle_at_80%_0%,rgba(255,255,255,0.04),transparent_40%)]" />
+            <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(900px_circle_at_20%_-10%,rgba(255,255,255,0.06),transparent_45%),radial-gradient(800px_circle_at_80%_0%,rgba(255,255,255,0.03),transparent_40%)]" />
             <Navigation
                 collapsed={collapsed}
                 onToggle={() => setCollapsed((prev) => !prev)}
