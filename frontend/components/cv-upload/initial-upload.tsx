@@ -85,12 +85,15 @@ export default function InitialCVUpload({
 
             // Then, ingest the file
             try {
+                const ingestFormData = new FormData()
+                ingestFormData.append('file', file)
                 const ingestResponse = await fetch(
                     `${backendUrl}/api/cv/ingest?file_id=${encodeURIComponent(
                         fileId
                     )}&candidate_id=temp`,
                     {
                         method: 'POST',
+                        body: ingestFormData,
                     }
                 )
 
