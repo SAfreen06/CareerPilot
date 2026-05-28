@@ -2,6 +2,17 @@ import re
 from typing import Iterable
 
 SECTION_HEADERS = {
+    "name": {
+        "name",
+        "full name",
+        "candidate name",
+    },
+    "contact": {
+        "contact",
+        "contact information",
+        "personal details",
+        "details",
+    },
     "experience": {
         "experience",
         "work experience",
@@ -23,6 +34,7 @@ SECTION_HEADERS = {
         "core skills",
         "competencies",
         "core competencies",
+        "additional skills",
     },
     "projects": {
         "projects",
@@ -44,6 +56,8 @@ SECTION_HEADERS = {
         "licenses and certifications",
     },
 }
+
+SECTION_ORDER = ["name", "contact", "summary", "experience", "education", "skills", "projects", "certifications", "general"]
 
 SECTION_KEYWORDS = {
     "experience": {
@@ -111,6 +125,14 @@ SECTION_KEYWORDS = {
         "experienced",
         "driven",
     },
+    "contact": {
+        "contact",
+        "email",
+        "phone",
+        "linkedin",
+        "website",
+        "location",
+    },
     "certifications": {
         "certification",
         "certifications",
@@ -125,6 +147,8 @@ SECTION_KEYWORDS = {
 }
 
 SECTION_MARKERS = [
+    ("name", "full name"),
+    ("name", "name"),
     ("experience", "professional experience"),
     ("experience", "work experience"),
     ("experience", "employment history"),
@@ -139,18 +163,102 @@ SECTION_MARKERS = [
     ("summary", "professional profile"),
     ("summary", "summary"),
     ("summary", "profile"),
+    ("contact", "contact information"),
+    ("contact", "contact"),
     ("certifications", "licenses and certifications"),
     ("certifications", "certifications"),
     ("certifications", "certificates"),
 ]
 
 
-def _normalize_section_name(line: str) -> str | None:
-    normalized = re.sub(r"[^a-z ]", "", line.lower()).strip()
+def normalize_section_name(section: str | None) -> str:
+    normalized = re.sub(r"\s+", " ", str(section or "general")).strip().lower()
     for canonical, aliases in SECTION_HEADERS.items():
         if normalized == canonical or normalized in aliases:
             return canonical
-    return None
+    return "general"
+
+
+def clean_section(lines: list[str]) -> str:
+    return " ".join(line.strip() for line in lines if line and line.strip()).strip()
+
+
+def detect_sections(lines: list[str]) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {"general": []}
+    current_section = "general"
+
+    for line in lines:
+        normalized_line = re.sub(r"\s+", " ", line).strip()
+        if not normalized_line:
+            continue
+
+        section_name = normalize_section_name(normalized_line)
+        if _looks_like_section_heading(normalized_line) and section_name != "general":
+            current_section = section_name
+            sections.setdefault(current_section, [])
+            continue
+
+        sections.setdefault(current_section, []).append(normalized_line)
+
+    return sections
+
+
+def chunk_text(text: str, chunk_size: int = 300) -> list[str]:
+    words = text.split()
+    if not words:
+        return []
+
+    chunks: list[str] = []
+    for index in range(0, len(words), chunk_size):
+        chunk = " ".join(words[index : index + chunk_size]).strip()
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+
+def chunk_sections_from_sections(sections: dict[str, str | list[str]], chunk_size: int = 300) -> list[dict[str, str]]:
+    chunks: list[dict[str, str]] = []
+
+    for section, content in sections.items():
+        if isinstance(content, list):
+            section_text = clean_section([str(item) for item in content])
+        else:
+            section_text = str(content or "").strip()
+
+        if not section_text:
+            continue
+
+        for chunk in chunk_text(section_text, chunk_size=chunk_size):
+            chunks.append({"section": normalize_section_name(section), "text": chunk})
+
+    return chunks
+
+
+def _looks_like_section_heading(line: str) -> bool:
+    normalized_line = re.sub(r"\s+", " ", line).strip().rstrip(":")
+    if not normalized_line:
+        return False
+
+    normalized_section = normalize_section_name(normalized_line)
+    if not normalized_section:
+        return False
+
+    if len(normalized_line) > 60:
+        return False
+
+    if len(normalized_line.split()) > 6:
+        return False
+
+    if normalized_line.lower() == normalized_section:
+        return True
+
+    aliases = SECTION_HEADERS.get(normalized_section, set())
+    return normalized_line.lower() in aliases
+
+
+def _normalize_section_name(line: str) -> str | None:
+    normalized = normalize_section_name(line)
+    return normalized if normalized else None
 
 
 def infer_section_from_text(text: str, fallback: str = "general") -> str:
@@ -171,154 +279,52 @@ def infer_section_from_text(text: str, fallback: str = "general") -> str:
 
 
 def extract_section_segments(text: str) -> list[dict[str, str]]:
-    matches: list[tuple[int, int, str]] = []
-    for section, marker in SECTION_MARKERS:
-        pattern = re.compile(rf"(?i)\b{re.escape(marker)}\b")
-        for match in pattern.finditer(text):
-            matches.append((match.start(), match.end(), section))
-
-    if not matches:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
         return []
 
-    matches.sort(key=lambda item: (item[0], -(item[1] - item[0])))
-    selected: list[tuple[int, int, str]] = []
-    last_end = -1
-    for start, end, section in matches:
-        if start >= last_end:
-            selected.append((start, end, section))
-            last_end = end
-
-    if not selected:
+    detected = detect_sections(lines)
+    heading_sections = [section for section in detected if section != "general" and detected[section]]
+    if not heading_sections:
         return []
 
     segments: list[dict[str, str]] = []
-    prefix = text[: selected[0][0]].strip()
-    if prefix:
-        segments.append({"section": infer_section_from_text(prefix), "text": prefix})
-
-    for index, (_, marker_end, section) in enumerate(selected):
-        next_start = selected[index + 1][0] if index + 1 < len(selected) else len(text)
-        segment_text = text[marker_end:next_start].strip()
+    for section, section_lines in detected.items():
+        if not section_lines:
+            continue
+        segment_text = clean_section(section_lines)
         if segment_text:
-            segments.append({"section": section, "text": segment_text})
+            segments.append({"section": normalize_section_name(section), "text": segment_text})
 
     return segments
 
 
 def extract_sections_by_lines(text: str) -> list[dict[str, str]]:
-    lines = [line.strip() for line in text.splitlines()]
-    segments: list[dict[str, str]] = []
+    return extract_section_segments(text)
 
-    current_section = "general"
-    current_lines: list[str] = []
 
-    def flush_current() -> None:
-        nonlocal current_lines, current_section
-        if current_lines:
-            segment_text = "\n".join(current_lines).strip()
-            if segment_text:
-                segments.append({"section": current_section, "text": segment_text})
-        current_lines = []
+def _append_chunk(chunks: list[dict[str, str]], section: str, text: str) -> None:
+    chunk_text = text.strip()
+    if chunk_text:
+        chunks.append({"section": section, "text": chunk_text})
 
-    for line in lines:
-        if not line:
-            continue
 
-        inferred = infer_section_from_text(line, fallback=current_section)
-        if inferred != current_section and current_lines:
-            flush_current()
-            current_section = inferred
-        elif current_section == "general":
-            inferred = infer_section_from_text(line)
-            if inferred != current_section and current_lines:
-                flush_current()
-                current_section = inferred
-
-        current_lines.append(line)
-
-    flush_current()
-
-    canonical_sections = {"experience", "education", "skills", "projects", "summary", "certifications"}
-    if len({segment["section"] for segment in segments if segment["section"] in canonical_sections}) < 2:
+def chunk_sections_improved(text: str) -> list[dict[str, str]]:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
         return []
 
-    return segments
+    segments = extract_section_segments(text)
+    if segments:
+        return chunk_sections_from_sections({segment["section"]: segment["text"] for segment in segments})
 
+    cleaned_text = clean_section(lines)
+    if not cleaned_text:
+        return []
 
-def _chunk_text(text: str, max_chars: int = 1000, overlap: int = 100) -> Iterable[str]:
-    if len(text) <= max_chars:
-        yield text
-        return
-
-    start = 0
-    while start < len(text):
-        end = min(start + max_chars, len(text))
-        yield text[start:end]
-        if end == len(text):
-            break
-        start = max(end - overlap, 0)
+    section = infer_section_from_text(cleaned_text, fallback="general")
+    return chunk_sections_from_sections({section: cleaned_text})
 
 
 def chunk_sections(text: str) -> list[dict[str, str]]:
-    lines = [line.strip() for line in text.splitlines()]
-    sections: list[dict[str, str]] = []
-
-    current_section = "general"
-    current_lines: list[str] = []
-
-    for line in lines:
-        if not line:
-            continue
-        header = _normalize_section_name(line)
-        if header:
-            if current_lines:
-                sections.append(
-                    {"section": current_section, "text": "\n".join(current_lines)}
-                )
-            current_section = header
-            current_lines = []
-            continue
-        current_lines.append(line)
-
-    if current_lines:
-        sections.append({"section": current_section, "text": "\n".join(current_lines)})
-
-    chunks: list[dict[str, str]] = []
-    for section in sections:
-        line_segments = extract_sections_by_lines(section["text"])
-        if line_segments:
-            for segment in line_segments:
-                for chunk in _chunk_text(segment["text"]):
-                    if chunk.strip():
-                        chunks.append(
-                            {
-                                "section": infer_section_from_text(
-                                    chunk.strip(), segment["section"]
-                                ),
-                                "text": chunk.strip(),
-                            }
-                        )
-            continue
-
-        section_segments = extract_section_segments(section["text"])
-        if section_segments:
-            for segment in section_segments:
-                for chunk in _chunk_text(segment["text"]):
-                    if chunk.strip():
-                        chunks.append(
-                            {
-                                "section": infer_section_from_text(
-                                    chunk.strip(), segment["section"]
-                                ),
-                                "text": chunk.strip(),
-                            }
-                        )
-            continue
-
-        for chunk in _chunk_text(section["text"]):
-            if chunk.strip():
-                chunk_text = chunk.strip()
-                inferred_section = infer_section_from_text(chunk_text, section["section"])
-                chunks.append({"section": inferred_section, "text": chunk_text})
-
-    return chunks
+    return chunk_sections_improved(text)

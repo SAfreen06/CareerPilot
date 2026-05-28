@@ -6,66 +6,14 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from app.core.config import get_settings
 from app.db import supabase
 from app.schemas.cv import CVChunkItem, CVEmbeddedDataResponse, CVEmbeddedSection, CVIngestResponse, CVUploadResponse
-from app.services.cv_chunker import chunk_sections, extract_section_segments, infer_section_from_text
+from app.services.cv_chunker import chunk_sections_from_sections, extract_section_segments, infer_section_from_text, normalize_section_name
 from app.services.cv_parser import parse_file
 from app.services.embeddings import embed_texts
+from app.services.cv_structurer import structure_resume_text
 from app.services.vector_store import add_embeddings, get_embeddings_by_source
 from app.utils.files import save_bytes_to_temp, save_upload_to_temp
 
 router = APIRouter(prefix="/cv", tags=["cv"])
-
-
-SECTION_ALIASES = {
-    "experience": {
-        "experience",
-        "work experience",
-        "professional experience",
-        "employment history",
-        "career history",
-        "professional background",
-    },
-    "education": {
-        "education",
-        "education and training",
-        "academic background",
-        "academic history",
-        "qualifications",
-    },
-    "skills": {
-        "skills",
-        "technical skills",
-        "core skills",
-        "competencies",
-        "core competencies",
-    },
-    "projects": {
-        "projects",
-        "project experience",
-        "selected projects",
-        "project portfolio",
-    },
-    "summary": {
-        "summary",
-        "professional summary",
-        "profile",
-        "about",
-        "about me",
-    },
-    "certifications": {
-        "certifications",
-        "certificates",
-        "licenses",
-        "licenses and certifications",
-    },
-}
-
-
-def _normalize_section_name(section: str | None) -> str:
-    normalized = str(section or "general").strip().lower()
-    for canonical, aliases in SECTION_ALIASES.items():
-        if normalized == canonical or normalized in aliases:
-            return canonical
-    return normalized or "general"
 
 
 @router.post("/upload", response_model=CVUploadResponse)
@@ -107,34 +55,42 @@ async def ingest_cv(
     file_id: str | None = None,
     candidate_id: str | None = None,
 ):
-    if file and file_id:
-        raise HTTPException(status_code=400, detail="Provide either file or file_id")
     if not file and not file_id:
         raise HTTPException(status_code=400, detail="File or file_id is required")
 
     temp_path = None
     filename = ""
+    source_id = file_id
     if file_id:
         settings = get_settings()
         filename = os.path.basename(file_id)
         if not filename:
             raise HTTPException(status_code=400, detail="Invalid file_id")
-        try:
-            downloaded = supabase.storage.from_(settings.supabase_bucket).download(file_id)
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail="Download failed") from exc
-        if not downloaded:
-            raise HTTPException(status_code=404, detail="File not found in storage")
-        temp_path = save_bytes_to_temp(downloaded, filename)
-    else:
+        if not file:
+            try:
+                downloaded = supabase.storage.from_(settings.supabase_bucket).download(file_id)
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail="Download failed") from exc
+            if not downloaded:
+                raise HTTPException(status_code=404, detail="File not found in storage")
+            temp_path = save_bytes_to_temp(downloaded, filename)
+    if file:
         if not file or not file.filename:
             raise HTTPException(status_code=400, detail="File name is required")
         filename = file.filename
         temp_path = save_upload_to_temp(file)
+        if not source_id:
+            source_id = filename
+
+    if not source_id:
+        source_id = filename
 
     try:
         text = parse_file(temp_path, filename)
-        chunks = chunk_sections(text)
+        structured_sections = structure_resume_text(text)
+        chunks = chunk_sections_from_sections(structured_sections)
+        if not chunks:
+            chunks = chunk_sections_from_sections({"general": text})
         if not chunks:
             raise HTTPException(status_code=400, detail="No text extracted from file")
 
@@ -142,7 +98,7 @@ async def ingest_cv(
         embeddings = embed_texts(texts)
         metadatas = []
         for chunk in chunks:
-            metadata = {"section": chunk["section"], "source": filename}
+            metadata = {"section": chunk["section"], "source": source_id}
             if candidate_id:
                 metadata["candidate_id"] = candidate_id
             metadatas.append(metadata)
@@ -170,23 +126,27 @@ async def get_cv_embedded_data(file_id: str):
         raise HTTPException(status_code=400, detail="file_id is required")
 
     result = get_embeddings_by_source(file_id)
+    if not result.get("documents"):
+        fallback_source = os.path.basename(file_id)
+        if fallback_source and fallback_source != file_id:
+            result = get_embeddings_by_source(fallback_source)
     documents = result.get("documents", [])
     metadatas = result.get("metadatas", [])
 
     if not documents:
         raise HTTPException(status_code=404, detail="Embedded CV data not found")
 
-    section_order = ["experience", "education", "skills", "projects", "summary", "certifications", "general"]
+    section_order = ["name", "contact", "summary", "experience", "education", "skills", "projects", "certifications", "general"]
     grouped: dict[str, list[CVChunkItem]] = {}
 
     for document, metadata in zip(documents, metadatas):
-        section = _normalize_section_name(metadata.get("section") if isinstance(metadata, dict) else None)
+        section = normalize_section_name(metadata.get("section") if isinstance(metadata, dict) else None)
         document_text = str(document or "")
         segments = extract_section_segments(document_text)
 
         if segments:
             for segment in segments:
-                segment_section = _normalize_section_name(segment["section"])
+                segment_section = normalize_section_name(segment["section"])
                 grouped.setdefault(segment_section, []).append(
                     CVChunkItem(section=segment_section, content=segment["text"])
                 )
