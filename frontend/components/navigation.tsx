@@ -20,7 +20,7 @@ import { useState } from 'react'
 
 const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/jobs', label: 'Job Hunter', icon: Briefcase },
+    { href: '/job-hunter', label: 'Job Hunter', icon: Briefcase },
     { href: '/check-resume', label: 'Check Resume', icon: FileText },
     { href: '/assistant', label: 'AI Assistant', icon: Bot },
     { href: '/track-progress', label: 'Track Progress', icon: LineChart },
